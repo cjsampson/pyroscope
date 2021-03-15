@@ -6,13 +6,13 @@ import (
 	"io/ioutil"
 	golog "log"
 	"net/http"
+	// blank import for package side effect
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"sync"
 	"text/template"
 	"time"
-
-	_ "net/http/pprof"
 
 	"github.com/markbates/pkger"
 	"github.com/pyroscope-io/pyroscope/pkg/build"
@@ -48,11 +48,8 @@ func New(cfg *config.Config, s *storage.Storage) *Controller {
 }
 
 func (ctrl *Controller) Start() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ingest", ctrl.ingestHandler)
-	mux.HandleFunc("/render", ctrl.renderHandler)
-	mux.HandleFunc("/labels", ctrl.labelsHandler)
-	mux.HandleFunc("/label-values", ctrl.labelValuesHandler)
+	mux := ctrl.CreateMux()
+
 	var dir http.FileSystem
 	if build.UseEmbeddedAssets {
 		// for this to work you need to run `pkger` first. See Makefile for more information
@@ -60,6 +57,7 @@ func (ctrl *Controller) Start() {
 	} else {
 		dir = http.Dir("./webapp/public")
 	}
+
 	fs := http.FileServer(dir)
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
@@ -76,6 +74,7 @@ func (ctrl *Controller) Start() {
 	logger := logrus.New()
 	w := logger.Writer()
 	defer w.Close()
+
 	s := &http.Server{
 		Addr:           ctrl.cfg.Server.APIBindAddr,
 		Handler:        mux,
@@ -96,6 +95,16 @@ func (ctrl *Controller) Start() {
 		logrus.Error(err)
 	}
 }
+
+func (ctrl *Controller) CreateMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ingest", ctrl.ingestHandler)
+	mux.HandleFunc("/render", ctrl.renderHandler)
+	mux.HandleFunc("/labels", ctrl.labelsHandler)
+	mux.HandleFunc("/label-values", ctrl.labelValuesHandler)
+	return mux
+}
+
 
 func renderServerError(rw http.ResponseWriter, text string) {
 	rw.WriteHeader(500)
